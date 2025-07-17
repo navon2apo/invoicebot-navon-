@@ -6,7 +6,8 @@ import http from 'http';
 // Define the scopes required for our application
 const SCOPES = [
   'https://www.googleapis.com/auth/gmail.readonly',
-  'https://www.googleapis.com/auth/gmail.send'
+  'https://www.googleapis.com/auth/userinfo.email',
+  'https://www.googleapis.com/auth/userinfo.profile'
 ];
 
 // Path to the credentials file
@@ -23,7 +24,7 @@ const REDIRECT_URI = `http://localhost:${OAUTH_PORT}/callback`;
  */
 function getOAuth2Client() {
   const credentials = JSON.parse(fs.readFileSync(CREDENTIALS_PATH));
-  const { client_secret, client_id } = credentials.installed;
+  const { client_secret, client_id } = credentials.web;
   const oAuth2Client = new google.auth.OAuth2(client_id, client_secret, REDIRECT_URI);
   return oAuth2Client;
 }
@@ -442,4 +443,23 @@ export function getAuthUrl() {
   });
   console.log('Generated Auth URL:', authUrl);
   return authUrl;
+}
+
+/**
+ * Search for invoice emails with date range - wrapper function
+ */
+export async function searchInvoiceEmailsWithDates(startDate, endDate) {
+  try {
+    const auth = await authorize();
+    
+    return await searchInvoicesWithDateFilter(auth, {
+      query: 'חשבונית OR קבלה OR invoice OR receipt',
+      startDate,
+      endDate,
+      maxResults: 200
+    });
+  } catch (error) {
+    console.error('Error searching invoice emails with dates:', error);
+    throw error;
+  }
 } 
