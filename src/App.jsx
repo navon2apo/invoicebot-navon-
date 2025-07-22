@@ -1,6 +1,8 @@
 import { useState, useEffect, useRef } from 'react'
 import './index.css'
 import EmailGenerator from './email-generator.js'
+import Toolbar from './components/Toolbar.jsx'
+import ToastManager from './components/ToastManager.jsx'
 
 function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false)
@@ -379,122 +381,76 @@ function App() {
 
 
   return (
-    <div className="container" dir="rtl">
-      <div style={{textAlign: 'center', marginBottom: '30px'}}>
-        <h1 style={{fontSize: '2rem', fontWeight: 'bold', color: '#333', marginBottom: '10px'}}>
-          🤖 InvoiceBot
-        </h1>
-        <p style={{fontSize: '1.1rem', color: '#666'}}>
-          מערכת אוטומטית לאיסוף וניהול חשבוניות מ-Gmail
-        </p>
-        <div style={{marginTop: '10px', color: 'red', fontWeight: 'bold', fontSize: '18px'}}>
-          גרסה: 2024-07-20 בדיקת קוד חי
-        </div>
-      </div>
+    <div className="min-h-screen bg-gray-50" dir="rtl">
+      {/* Toolbar Component */}
+      <Toolbar
+        isAuthenticated={isAuthenticated}
+        isLoading={isLoading}
+        onGoogleAuth={handleGoogleAuth}
+        onGoogleLogout={handleGoogleLogout}
+        onScanEmails={handleScanEmails}
+        onTestElectron={testElectron}
+      />
 
-      {/* Main Control Panel */}
-      <div style={{background: 'white', borderRadius: '12px', padding: '25px', marginBottom: '25px', boxShadow: '0 4px 12px rgba(0,0,0,0.1)'}}>
-        <div style={{display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '15px', marginBottom: '20px'}}>
-          <button
-            onClick={handleGoogleAuth}
-            disabled={isLoading || isAuthenticated}
-            className={isAuthenticated ? 'btn-success' : 'btn-primary'}
-          >
-            {isAuthenticated ? '✅ מחובר ל-Google' : '🔐 התחבר ל-Google'}
-          </button>
+      {/* Toast Manager */}
+      <ToastManager status={status} isLoading={isLoading} />
 
-          {isAuthenticated && (
-            <button
-              onClick={handleGoogleLogout}
-              disabled={isLoading}
-              className="btn-danger"
-            >
-              🔓 התנתק מ-Google
-            </button>
+      {/* Main Content Container */}
+      <div className="container mx-auto px-4 py-6 max-w-7xl">
+
+        {/* Date Filtering Panel */}
+        <div className="bg-white rounded-xl shadow-lg p-6 mb-6">
+          <h2 className="text-xl font-bold text-gray-800 mb-4">📅 פילטר תאריכים</h2>
+          
+          <div className="flex items-center gap-4 mb-4">
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={useDateFilter}
+                onChange={(e) => setUseDateFilter(e.target.checked)}
+                className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+              />
+              <span className="text-sm font-medium text-gray-700">השתמש בפילטר תאריכים</span>
+            </label>
+          </div>
+
+          {useDateFilter && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  תאריך התחלה
+                </label>
+                <input
+                  type="date"
+                  value={startDate}
+                  onChange={(e) => setStartDate(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  תאריך סיום
+                </label>
+                <input
+                  type="date"
+                  value={endDate}
+                  onChange={(e) => setEndDate(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+              </div>
+            </div>
           )}
 
-          <button
-            onClick={handleScanEmails}
-            disabled={isLoading || !isAuthenticated}
-            className="btn-purple"
-          >
-            🔍 סרוק מיילים
-          </button>
-
-          <button
-            onClick={testElectron}
-            disabled={isLoading}
-            className="btn-gray"
-          >
-            🔗 בדיקת Electron
-          </button>
-        </div>
-
-        {/* Status Display */}
-        <div style={{background: '#f8f9fa', borderRadius: '8px', padding: '15px'}}>
-          <div style={{display: 'flex', alignItems: 'center', gap: '10px'}}>
-            {isLoading && (
-              <div style={{width: '20px', height: '20px', border: '2px solid #007bff', borderTop: '2px solid transparent', borderRadius: '50%', animation: 'spin 1s linear infinite'}}></div>
-            )}
-            <span style={{fontSize: '14px', fontWeight: '500', color: '#333'}}>
-              {status || 'מוכן לעבודה...'}
-            </span>
-          </div>
-        </div>
-      </div>
-
-      {/* Date Filtering Panel */}
-      <div style={{background: 'white', borderRadius: '12px', padding: '25px', marginBottom: '25px', boxShadow: '0 4px 12px rgba(0,0,0,0.1)'}}>
-        <h2 style={{fontSize: '1.2rem', fontWeight: 'bold', color: '#333', marginBottom: '15px'}}>📅 פילטר תאריכים</h2>
-        
-        <div style={{display: 'flex', alignItems: 'center', gap: '15px', marginBottom: '15px'}}>
-          <label style={{display: 'flex', alignItems: 'center', gap: '8px'}}>
-            <input
-              type="checkbox"
-              checked={useDateFilter}
-              onChange={(e) => setUseDateFilter(e.target.checked)}
-            />
-            <span style={{fontSize: '14px', fontWeight: '500', color: '#333'}}>השתמש בפילטר תאריכים</span>
-          </label>
-        </div>
-
-        {useDateFilter && (
-          <div style={{display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '15px'}}>
-            <div>
-              <label style={{display: 'block', fontSize: '14px', fontWeight: '500', color: '#333', marginBottom: '8px'}}>
-                תאריך התחלה
-              </label>
-              <input
-                type="date"
-                value={startDate}
-                onChange={(e) => setStartDate(e.target.value)}
-                style={{width: '100%'}}
-              />
+          {useDateFilter && startDate && endDate && (
+            <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+              <p className="text-sm text-blue-700 mb-0">
+                🔍 יחפש מיילים מ-<strong>{startDate}</strong> עד <strong>{endDate}</strong>
+                {' '}({Math.ceil((new Date(endDate) - new Date(startDate)) / (1000 * 60 * 60 * 24))} ימים)
+              </p>
             </div>
-            
-            <div>
-              <label style={{display: 'block', fontSize: '14px', fontWeight: '500', color: '#333', marginBottom: '8px'}}>
-                תאריך סיום
-              </label>
-              <input
-                type="date"
-                value={endDate}
-                onChange={(e) => setEndDate(e.target.value)}
-                style={{width: '100%'}}
-              />
-            </div>
-          </div>
-        )}
-
-        {useDateFilter && startDate && endDate && (
-          <div style={{marginTop: '15px', padding: '12px', background: '#e3f2fd', borderRadius: '8px'}}>
-            <p style={{fontSize: '14px', color: '#1565c0', margin: 0}}>
-              🔍 יחפש מיילים מ-<strong>{startDate}</strong> עד <strong>{endDate}</strong>
-              {' '}({Math.ceil((new Date(endDate) - new Date(startDate)) / (1000 * 60 * 60 * 24))} ימים)
-            </p>
-          </div>
-        )}
-      </div>
+          )}
+        </div>
 
         {/* Statistics Section */}
         {invoices.length > 0 && (
@@ -621,7 +577,7 @@ function App() {
                        {invoice.attachments && invoice.attachments.length > 0 && (
                          <div className="flex gap-1 mt-1">
                            {invoice.attachments.map((att, i) => (
-                             <span key={i} style={{cursor:'pointer'}}
+                             <span key={i} className="cursor-pointer hover:opacity-75 transition-opacity"
                                onClick={async e => {
                                  e.stopPropagation();
                                  setStatus('מוריד קובץ...');
@@ -646,11 +602,11 @@ function App() {
                                title={`שם: ${att.filename}\nסוג: ${att.mimeType || ''}\nגודל: ${att.size ? att.size + ' bytes' : ''}`}
                              >
                                {att.mimeType && att.mimeType.startsWith('image/') ? (
-                                 <span style={{fontSize:'18px', color:'#1976d2'}}>🖼️</span>
+                                 <span className="text-lg text-blue-600">🖼️</span>
                                ) : att.mimeType === 'application/pdf' ? (
-                                 <span style={{fontSize:'18px', color:'#b71c1c'}}>📄</span>
+                                 <span className="text-lg text-red-700">📄</span>
                                ) : (
-                                 <span>📎</span>
+                                 <span className="text-base">📎</span>
                                )}
                              </span>
                            ))}
@@ -720,16 +676,18 @@ function App() {
           </div>
         )}
         {savedFilesInfo.length > 0 && (
-          <div className="bg-blue-50 border border-blue-200 rounded p-3 mt-4 text-xs">
-            <div className="mb-2 font-bold text-blue-700">✅ קבצים שנשמרו:</div>
-            <ul>
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mt-4">
+            <div className="mb-2 font-bold text-blue-700 text-sm">✅ קבצים שנשמרו:</div>
+            <ul className="text-xs space-y-1">
               {savedFilesInfo.map((f, idx) => (
-                <li key={idx}>{f.file} <span style={{color:'#888'}}>({f.emailSubject})</span></li>
+                <li key={idx} className="text-gray-700">
+                  {f.file} <span className="text-gray-500">({f.emailSubject})</span>
+                </li>
               ))}
             </ul>
             {savedFolderPath && (
               <button
-                className="mt-2 px-2 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded text-xs"
+                className="mt-3 px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded text-xs font-medium transition-colors"
                 onClick={() => window.electronAPI.openExternal('file://' + savedFolderPath)}
               >
                 פתח תיקייה
@@ -740,38 +698,66 @@ function App() {
 
         {/* הצגת preview בפופאפ */}
         {previewFile && (
-          <div style={{position:'fixed', top:0, left:0, width:'100vw', height:'100vh', background:'rgba(0,0,0,0.5)', zIndex:1000, display:'flex', alignItems:'center', justifyContent:'center'}} onClick={handleClosePreview}>
-            <div style={{background:'#fff', padding:20, borderRadius:8, maxWidth:'90vw', maxHeight:'90vh', position:'relative'}} onClick={e => e.stopPropagation()}>
-              <button onClick={handleClosePreview} style={{position:'absolute', top:10, right:10, fontSize:18, background:'none', border:'none', cursor:'pointer'}}>✖</button>
-              <div style={{marginBottom:10, fontWeight:'bold'}}>{previewFile.filename}</div>
-              {previewFile.type === 'image' ? (
-                <img src={previewFile.url} alt={previewFile.filename} style={{maxWidth:'80vw', maxHeight:'70vh', border:'1px solid #ccc', borderRadius:4}} />
-              ) : previewFile.type === 'pdf' ? (
-                <iframe src={previewFile.url} title={previewFile.filename} style={{width:'70vw', height:'70vh', border:'none'}} />
-              ) : null}
+          <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4" onClick={handleClosePreview}>
+            <div className="bg-white rounded-lg shadow-xl max-w-[90vw] max-h-[90vh] relative overflow-hidden" onClick={e => e.stopPropagation()}>
+              <button 
+                onClick={handleClosePreview} 
+                className="absolute top-3 right-3 text-gray-500 hover:text-gray-700 text-xl font-bold bg-white rounded-full w-8 h-8 flex items-center justify-center shadow-md transition-colors z-10"
+              >
+                ✖
+              </button>
+              <div className="p-6">
+                <div className="mb-4 font-bold text-gray-800 text-lg">{previewFile.filename}</div>
+                {previewFile.type === 'image' ? (
+                  <img 
+                    src={previewFile.url} 
+                    alt={previewFile.filename} 
+                    className="max-w-[80vw] max-h-[70vh] border border-gray-300 rounded-lg object-contain"
+                  />
+                ) : previewFile.type === 'pdf' ? (
+                  <iframe 
+                    src={previewFile.url} 
+                    title={previewFile.filename} 
+                    className="w-[70vw] h-[70vh] border-none rounded-lg"
+                  />
+                ) : null}
+              </div>
             </div>
           </div>
         )}
 
         {/* פידבק הורדה popup */}
         {showDownloadModal && (
-          <div style={{position:'fixed', top:0, left:0, width:'100vw', height:'100vh', background:'rgba(0,0,0,0.4)', zIndex:2000, display:'flex', alignItems:'center', justifyContent:'center'}}>
-            <div style={{background:'#fff', padding:30, borderRadius:10, minWidth:350, maxWidth:500, boxShadow:'0 4px 16px rgba(0,0,0,0.15)', position:'relative'}}>
-              <button onClick={()=>setShowDownloadModal(false)} style={{position:'absolute', top:10, right:10, fontSize:18, background:'none', border:'none', cursor:'pointer'}}>✖</button>
-              <div style={{fontWeight:'bold', fontSize:18, marginBottom:10, color:'#1976d2'}}>✔️ קבצים נשמרו בהצלחה</div>
-              <div style={{marginBottom:10}}>
-                <label>שם תיקייה (ניתן לשנות לפני שמירה הבאה): </label>
-                <input ref={folderNameInputRef} value={customFolderName} onChange={e=>setCustomFolderName(e.target.value)} style={{width:'80%', padding:4, border:'1px solid #ccc', borderRadius:4}} />
+          <div className="fixed inset-0 bg-black bg-opacity-40 z-50 flex items-center justify-center p-4">
+            <div className="bg-white rounded-xl shadow-2xl w-full max-w-md relative p-6">
+              <button 
+                onClick={()=>setShowDownloadModal(false)} 
+                className="absolute top-4 right-4 text-gray-500 hover:text-gray-700 text-xl font-bold transition-colors"
+              >
+                ✖
+              </button>
+              <div className="text-xl font-bold text-blue-600 mb-4">✔️ קבצים נשמרו בהצלחה</div>
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  שם תיקייה (ניתן לשנות לפני שמירה הבאה):
+                </label>
+                <input 
+                  ref={folderNameInputRef} 
+                  value={customFolderName} 
+                  onChange={e=>setCustomFolderName(e.target.value)} 
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
               </div>
-              <ul style={{maxHeight:150, overflowY:'auto', fontSize:13}}>
+              <ul className="max-h-40 overflow-y-auto text-sm space-y-1 mb-4">
                 {savedFilesInfo.map((f, idx) => (
-                  <li key={idx}>{f.file} <span style={{color:'#888'}}>({f.emailSubject})</span></li>
+                  <li key={idx} className="text-gray-700">
+                    {f.file} <span className="text-gray-500">({f.emailSubject})</span>
+                  </li>
                 ))}
               </ul>
               {savedFolderPath && (
                 <button
-                  className="mt-2 px-2 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded text-xs"
-                  style={{marginTop:10}}
+                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition-colors"
                   onClick={() => window.electronAPI.openExternal('file://' + savedFolderPath)}
                 >
                   פתח תיקייה
@@ -783,34 +769,45 @@ function App() {
 
         {/* הצג מודאל עם גוף המייל (rendered HTML) */}
         {showEmailBody && (
-          <div style={{position:'fixed', top:0, left:0, width:'100vw', height:'100vh', background:'rgba(0,0,0,0.4)', zIndex:3000, display:'flex', alignItems:'center', justifyContent:'center'}} onClick={()=>setShowEmailBody(null)}>
-            <div id="email-body-modal" style={{background:'#fff', padding:30, borderRadius:10, minWidth:350, maxWidth:700, maxHeight:'80vh', overflowY:'auto', position:'relative'}} onClick={e=>e.stopPropagation()}>
-              <button onClick={()=>setShowEmailBody(null)} style={{position:'absolute', top:10, right:10, fontSize:18, background:'none', border:'none', cursor:'pointer'}}>✖</button>
-              <div style={{fontWeight:'bold', fontSize:18, marginBottom:10, color:'#1976d2'}}>גוף המייל</div>
+          <div className="fixed inset-0 bg-black bg-opacity-40 z-50 flex items-center justify-center p-4" onClick={()=>setShowEmailBody(null)}>
+            <div id="email-body-modal" className="bg-white rounded-xl shadow-2xl w-full max-w-4xl max-h-[80vh] overflow-y-auto relative p-6" onClick={e=>e.stopPropagation()}>
+              <button 
+                onClick={()=>setShowEmailBody(null)} 
+                className="absolute top-4 right-4 text-gray-500 hover:text-gray-700 text-xl font-bold transition-colors z-10"
+              >
+                ✖
+              </button>
+              <div className="text-xl font-bold text-blue-600 mb-4">גוף המייל</div>
               {/* הצג את גוף המייל בתוך iframe */}
               <iframe
                 id="email-body-iframe"
                 title="email-body"
                 src={"data:text/html;charset=utf-8," + encodeURIComponent(emailBodyHtml)}
-                style={{width:'100%', minHeight:'400px', border:'1px solid #ccc', borderRadius:'6px', background:'#fff'}}
+                className="w-full min-h-96 border border-gray-300 rounded-lg bg-white mb-4"
                 sandbox="allow-same-origin allow-popups allow-forms allow-scripts"
               />
-              <button onClick={async e => {
-                e.stopPropagation();
-                setStatus('יוצר צילום גוף מייל...');
-                // שלח את ה-HTML המקורי ל-Electron לצילום
-                const res = await window.electronAPI.captureMailScreenshot(emailBodyHtml);
-                if (res.success) {
-                  setStatus('✅ צילום גוף המייל נשמר בהצלחה! ' + res.filePath);
-                } else if (res.canceled) {
-                  setStatus('צילום בוטל');
-                } else {
-                  setStatus('❌ שגיאה בצילום גוף המייל: ' + res.error);
-                }
-              }} className="ml-2 px-2 py-1 bg-gray-200 rounded text-xs mt-4">צלם את גוף המייל</button>
+              <button 
+                onClick={async e => {
+                  e.stopPropagation();
+                  setStatus('יוצר צילום גוף מייל...');
+                  // שלח את ה-HTML המקורי ל-Electron לצילום
+                  const res = await window.electronAPI.captureMailScreenshot(emailBodyHtml);
+                  if (res.success) {
+                    setStatus('✅ צילום גוף המייל נשמר בהצלחה! ' + res.filePath);
+                  } else if (res.canceled) {
+                    setStatus('צילום בוטל');
+                  } else {
+                    setStatus('❌ שגיאה בצילום גוף המייל: ' + res.error);
+                  }
+                }} 
+                className="px-4 py-2 bg-gray-500 hover:bg-gray-600 text-white rounded-lg text-sm font-medium transition-colors"
+              >
+                צלם את גוף המייל
+              </button>
             </div>
           </div>
         )}
+      </div>
     </div>
   )
 }
