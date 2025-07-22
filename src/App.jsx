@@ -282,74 +282,6 @@ function App() {
     }
   }
 
-  const handleGenerateEmailSummary = async () => {
-    const processedInvoices = invoices.filter(inv => inv.isProcessed)
-    
-    if (processedInvoices.length === 0) {
-      setStatus('❌ אין חשבוניות מעובדות ליצירת סיכום')
-      return
-    }
-
-    try {
-      setIsLoading(true)
-      setStatus('📧 יוצר מייל סיכום...')
-      
-      const emailContent = emailGenerator.generateAccountantSummary(processedInvoices)
-      
-      // Create and download HTML file
-      const htmlBlob = new Blob([emailContent.htmlBody], { type: 'text/html;charset=utf-8' })
-      const htmlUrl = URL.createObjectURL(htmlBlob)
-      const htmlLink = document.createElement('a')
-      htmlLink.href = htmlUrl
-      htmlLink.download = `invoice-summary-${new Date().toISOString().split('T')[0]}.html`
-      htmlLink.click()
-      
-      // Create and download text version
-      const textBlob = new Blob([emailContent.textBody], { type: 'text/plain;charset=utf-8' })
-      const textUrl = URL.createObjectURL(textBlob)
-      const textLink = document.createElement('a')
-      textLink.href = textUrl
-      textLink.download = `invoice-summary-${new Date().toISOString().split('T')[0]}.txt`
-      textLink.click()
-      
-      setStatus(`✅ מייל סיכום נוצר בהצלחה! נושא: ${emailContent.subject}`)
-    } catch (error) {
-      setStatus('❌ שגיאה ביצירת מייל סיכום: ' + error.message)
-    } finally {
-      setIsLoading(false)
-    }
-  }
-
-  const handleExportCSV = async () => {
-    const processedInvoices = invoices.filter(inv => inv.isProcessed)
-    
-    if (processedInvoices.length === 0) {
-      setStatus('❌ אין חשבוניות מעובדות לייצוא')
-      return
-    }
-
-    try {
-      setIsLoading(true)
-      setStatus('📊 יוצר קובץ CSV...')
-      
-      const csvContent = emailGenerator.generateCSVExport(processedInvoices)
-      
-      // Download CSV file
-      const csvBlob = new Blob(['\ufeff' + csvContent], { type: 'text/csv;charset=utf-8' }) // BOM for Hebrew support
-      const csvUrl = URL.createObjectURL(csvBlob)
-      const csvLink = document.createElement('a')
-      csvLink.href = csvUrl
-      csvLink.download = `invoices-export-${new Date().toISOString().split('T')[0]}.csv`
-      csvLink.click()
-      
-      setStatus('✅ קובץ CSV נוצר והורד בהצלחה!')
-    } catch (error) {
-      setStatus('❌ שגיאה ביצירת קובץ CSV: ' + error.message)
-    } finally {
-      setIsLoading(false)
-    }
-  }
-
   // פונקציה חדשה לשמירת קבצים לתיקייה
   const handleSaveAttachments = async (attachments, invoiceDate) => {
     const result = await window.electronAPI.saveAttachmentsToFolder(attachments, invoiceDate);
@@ -491,61 +423,54 @@ function App() {
           </div>
         )}
 
-        {/* Invoice Management Section */}
+        {/* Actions Toolbar - Sticky */}
         {invoices.length > 0 && (
-          <div className="bg-gradient-to-r from-white to-gray-50 rounded-2xl shadow-2xl border border-gray-100 p-8 hover:shadow-3xl transition-all duration-300 transform hover:-translate-y-1">
-            <div className="flex justify-between items-center mb-6">
-              <h2 className="text-3xl font-black bg-gradient-to-r from-green-600 to-blue-600 bg-clip-text text-transparent">
-                📋 חשבוניות שנמצאו ({filteredInvoices.length})
-              </h2>
-              <div className="flex gap-3 flex-wrap">
-                <button
-                  onClick={selectAllInvoices}
-                  className="px-5 py-3 bg-gradient-to-r from-gray-600 to-gray-700 hover:from-gray-700 hover:to-gray-800 text-white rounded-xl text-sm font-bold transition-all duration-300 transform hover:scale-105 shadow-lg hover:shadow-xl"
-                >
-                  {selectedInvoices.length === filteredInvoices.length ? 'בטל בחירה' : 'בחר הכל'}
-                </button>
-                <button
-                  onClick={handleProcessAndDownload}
-                  disabled={selectedInvoices.length === 0 || isLoading}
-                  className="px-5 py-3 bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white rounded-xl text-sm font-bold transition-all duration-300 transform hover:scale-105 shadow-lg hover:shadow-xl disabled:opacity-50 disabled:transform-none disabled:cursor-not-allowed"
-                >
-                  🔄 עבד והורד ({selectedInvoices.length})
-                </button>
-                <button
-                  onClick={handleGenerateEmailSummary}
-                  disabled={invoices.filter(inv => inv.isProcessed).length === 0 || isLoading}
-                  className="px-5 py-3 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white rounded-xl text-sm font-bold transition-all duration-300 transform hover:scale-105 shadow-lg hover:shadow-xl disabled:opacity-50 disabled:transform-none disabled:cursor-not-allowed"
-                >
-                  📧 יצר סיכום
-                </button>
-                <button
-                  onClick={handleExportCSV}
-                  disabled={invoices.filter(inv => inv.isProcessed).length === 0 || isLoading}
-                  className="px-5 py-3 bg-gradient-to-r from-orange-600 to-orange-700 hover:from-orange-700 hover:to-orange-800 text-white rounded-xl text-sm font-bold transition-all duration-300 transform hover:scale-105 shadow-lg hover:shadow-xl disabled:opacity-50 disabled:transform-none disabled:cursor-not-allowed"
-                >
-                  📊 יצא CSV
-                </button>
+          <div className="sticky top-16 z-30 bg-white/95 backdrop-blur-sm border-b border-slate-200 shadow-lg mb-6">
+            <div className="container mx-auto px-4 py-3">
+              {/* כפתורי הפעולות */}
+              <div className="flex justify-between items-center mb-3">
+                <h2 className="text-lg font-bold text-slate-700">
+                  📋 חשבוניות שנמצאו ({filteredInvoices.length})
+                </h2>
+                <div className="flex gap-2 flex-wrap">
+                  <button
+                    onClick={selectAllInvoices}
+                    className="px-3 py-2 bg-gradient-to-r from-slate-600 to-slate-700 hover:from-slate-700 hover:to-slate-800 text-white rounded-lg text-sm font-semibold transition-all duration-300 transform hover:scale-105 shadow-md hover:shadow-lg"
+                  >
+                    {selectedInvoices.length === filteredInvoices.length ? 'בטל בחירה' : 'בחר הכל'}
+                  </button>
+                  <button
+                    onClick={handleProcessAndDownload}
+                    disabled={selectedInvoices.length === 0 || isLoading}
+                    className="px-3 py-2 bg-gradient-to-r from-emerald-600 to-green-700 hover:from-emerald-700 hover:to-green-800 text-white rounded-lg text-sm font-semibold transition-all duration-300 transform hover:scale-105 shadow-md hover:shadow-lg disabled:opacity-50 disabled:transform-none disabled:cursor-not-allowed"
+                  >
+                    🔄 עבד והורד ({selectedInvoices.length})
+                  </button>
+                </div>
               </div>
-            </div>
-
-            {/* Search Bar */}
-            <div className="mb-6">
+              
+              {/* שורת החיפוש */}
               <div className="relative">
                 <input
                   type="text"
                   placeholder="🔍 חפש חשבוניות לפי נושא או שולח..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full px-6 py-4 text-lg border-2 border-gray-200 rounded-2xl focus:ring-4 focus:ring-blue-300 focus:border-blue-500 transition-all duration-300 shadow-lg hover:shadow-xl bg-gradient-to-r from-white to-blue-50"
+                  className="w-full px-4 py-2 text-base border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-300 shadow-sm hover:shadow-md bg-white"
                 />
-                <div className="absolute right-4 top-1/2 transform -translate-y-1/2 text-gray-400">
-                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <div className="absolute right-3 top-1/2 transform -translate-y-1/2 text-slate-400">
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
                   </svg>
                 </div>
               </div>
             </div>
+          </div>
+        )}
+
+        {/* Invoice Management Section */}
+        {invoices.length > 0 && (
+          <div className="bg-gradient-to-r from-white to-slate-50 rounded-2xl shadow-xl border border-slate-200 p-6 hover:shadow-2xl transition-all duration-300">
 
             {/* Invoice List */}
             <div className="space-y-3 max-h-96 overflow-y-auto">
