@@ -232,13 +232,12 @@ export async function getEmailDetails(auth, messageId) {
     const subject = headers.find(h => h.name === 'Subject')?.value || '';
     const from = headers.find(h => h.name === 'From')?.value || '';
     const date = headers.find(h => h.name === 'Date')?.value || '';
+    const rfc822msgid = headers.find(h => h.name.toLowerCase() === 'message-id')?.value?.replace(/[<>]/g, '') || '';
     
     // Extract attachments info
     const attachments = [];
-    
     function extractAttachments(parts) {
       if (!parts) return;
-      
       for (const part of parts) {
         if (part.filename && part.body.attachmentId) {
           attachments.push({
@@ -248,15 +247,33 @@ export async function getEmailDetails(auth, messageId) {
             size: part.body.size
           });
         }
-        
         if (part.parts) {
           extractAttachments(part.parts);
         }
       }
     }
-    
     extractAttachments(message.payload.parts);
-    
+
+    // Extract body (HTML or plain text)
+    function getBody(payload) {
+      if (!payload) return '';
+      if (payload.mimeType === 'text/html' && payload.body && payload.body.data) {
+        return Buffer.from(payload.body.data, 'base64').toString('utf-8');
+      }
+      if (payload.mimeType === 'text/plain' && payload.body && payload.body.data) {
+        return Buffer.from(payload.body.data, 'base64').toString('utf-8');
+      }
+      if (payload.parts) {
+        for (const part of payload.parts) {
+          const body = getBody(part);
+          if (body) return body;
+        }
+      }
+      return '';
+    }
+    const body = getBody(message.payload);
+    console.log('getEmailDetails: body type', typeof body, 'length', body?.length, 'sample', body?.slice?.(0,100));
+
     return {
       id: messageId,
       subject,
@@ -264,6 +281,8 @@ export async function getEmailDetails(auth, messageId) {
       date,
       attachments,
       internalDate: message.internalDate,
+      body, // גוף המייל בפורמט HTML או טקסט
+      rfc822msgid,
       rawData: message
     };
     
@@ -443,6 +462,36 @@ export function getAuthUrl() {
   });
   console.log('Generated Auth URL:', authUrl);
   return authUrl;
+}
+
+/**
+ * Logout function - deletes stored token to allow switching accounts
+ * @returns {Promise<{success: boolean, message: string}>}
+ */
+export async function logout() {
+  try {
+    // Check if token file exists
+    if (fs.existsSync(TOKEN_PATH)) {
+      // Delete the token file
+      fs.unlinkSync(TOKEN_PATH);
+      console.log('Token file deleted successfully');
+      return { 
+        success: true, 
+        message: 'התנתקות הושלמה בהצלחה!' 
+      };
+    } else {
+      return { 
+        success: true, 
+        message: 'כבר מנותק' 
+      };
+    }
+  } catch (error) {
+    console.error('Error during logout:', error);
+    return { 
+      success: false, 
+      message: 'שגיאה בהתנתקות: ' + error.message 
+    };
+  }
 }
 
 /**

@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "concurrently \"npm run dev:react\" \"npm run dev:electron\"",
     "dev:react": "vite",
-    "dev:electron": "cross-env NODE_ENV=development wait-on tcp:5174 && electron .",
+    "dev:electron": "cross-env NODE_ENV=development wait-on tcp:5174 && .\\node_modules\\.bin\\electron.cmd .",
     "electron": "electron .",
     "build": "vite build",
     "build:electron": "electron-builder",
@@ -23,6 +23,8 @@
   "dependencies": {
     "file-saver": "^2.0.5",
     "googleapis": "^153.0.0",
+    "html2canvas": "^1.4.1",
+    "nodemailer": "^7.0.5",
     "pdf-parse": "^1.1.1",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",

@@ -1,5 +1,7 @@
-const { app, BrowserWindow, ipcMain, shell } = require('electron');
+const { app, BrowserWindow, ipcMain, shell, dialog } = require('electron');
 const path = require('path');
+const fs = require('fs');
+const fsp = require('fs').promises;
 
 // Import Google Auth functions (will need to convert to CommonJS)
 let googleAuth;
@@ -32,14 +34,20 @@ function createWindow() {
     },
   });
 
-  const isDev = process.env.NODE_ENV === 'development';
-  
-  if (isDev) {
-    mainWindow.loadURL('http://localhost:5175');
+  // ננסה תמיד לטעון את ה-dev server אם הוא זמין
+  const devUrl = 'http://localhost:5174';
+  const prodUrl = path.join(__dirname, 'dist/index.html');
+
+  // נבדוק אם ה-dev server רץ
+  const http = require('http');
+  http.get(devUrl, (res) => {
+    console.log('ELECTRON: טוען dev server:', devUrl);
+    mainWindow.loadURL(devUrl);
     mainWindow.webContents.openDevTools();
-  } else {
-    mainWindow.loadFile(path.join(__dirname, 'dist/index.html'));
-  }
+  }).on('error', () => {
+    console.log('ELECTRON: dev server לא זמין, טוען build:', prodUrl);
+    mainWindow.loadFile(prodUrl);
+  });
 }
 
 // IPC Handlers for Google Auth
@@ -100,27 +108,74 @@ ipcMain.handle('google-submit-auth-code', async (event, code) => {
   }
 });
 
+ipcMain.handle('google-logout', async () => {
+  try {
+    if (!googleAuth) await loadGoogleAuth();
+    const result = await googleAuth.logout();
+    // איפוס session של Gmail ב-Electron
+    const { session } = require('electron');
+    await session.fromPartition('persist:gmail-session').clearStorageData();
+    return result;
+  } catch (error) {
+    console.error('Error during logout:', error);
+    return { success: false, message: 'שגיאה בהתנתקות: ' + error.message };
+  }
+});
+
 ipcMain.handle('google-search-invoices', async () => {
   try {
     if (!googleAuth) await loadGoogleAuth();
     const auth = await googleAuth.authorize();
     const messages = await googleAuth.searchInvoices(auth);
-    
+    console.log('google-search-invoices: messages.length', messages.length);
     const emailPromises = messages.map(async (message) => {
       try {
-        return await googleAuth.getEmailDetails(auth, message.id);
+        const email = await googleAuth.getEmailDetails(auth, message.id);
+        console.log('google-search-invoices: email', {
+          id: email.id,
+          subject: email.subject,
+          attachments: email.attachments
+        });
+        // אל תביא data, רק metadata
+        return email;
       } catch (error) {
         console.error(`Error getting email details for ${message.id}:`, error);
         return null;
       }
     });
-    
     const emails = await Promise.all(emailPromises);
     const validEmails = emails.filter(email => email !== null);
-    
+    console.log('google-search-invoices: validEmails.length', validEmails.length);
     return { success: true, emails: validEmails };
   } catch (error) {
     console.error('Error searching invoices:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// Endpoint: הורד קובץ לפי id (getAttachment)
+ipcMain.handle('download-attachment', async (event, { emailId, attachmentId }) => {
+  try {
+    if (!googleAuth) await loadGoogleAuth();
+    const auth = await googleAuth.authorize();
+    const buffer = await googleAuth.getAttachment(auth, emailId, attachmentId);
+    return { success: true, data: buffer.toString('base64') };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+
+// Endpoint: showSaveDialog ושמירה ל-fs
+ipcMain.handle('save-file-dialog', async (event, { filename, dataBase64 }) => {
+  try {
+    const win = BrowserWindow.getFocusedWindow();
+    const { filePath, canceled } = await dialog.showSaveDialog(win, {
+      defaultPath: filename
+    });
+    if (canceled || !filePath) return { success: false, canceled: true };
+    await fsp.writeFile(filePath, Buffer.from(dataBase64, 'base64'));
+    return { success: true, filePath };
+  } catch (error) {
     return { success: false, error: error.message };
   }
 });
@@ -461,6 +516,348 @@ function extractCustomerInfo(text) {
 
   return customerInfo;
 }
+
+// שמירת קבצים לתיקייה – שמור רק קבצים עם data
+ipcMain.handle('save-attachments-to-folder', async (event, attachments, invoiceDate) => {
+  try {
+    // קביעת תיקיית יעד לפי חודש
+    const dateObj = invoiceDate ? new Date(invoiceDate) : new Date();
+    const year = dateObj.getFullYear();
+    const month = String(dateObj.getMonth() + 1).padStart(2, '0');
+    const folderPath = path.join(__dirname, 'invoices', `${year}-${month}`);
+    await fsp.mkdir(folderPath, { recursive: true });
+
+    const savedFiles = [];
+    for (const att of attachments) {
+      if (!att.data) {
+        console.log('Skipping attachment with no data:', att.filename);
+        continue;
+      }
+      let baseName = att.filename.replace(/[^a-zA-Z0-9א-ת_.-]/g, '_');
+      let filePath = path.join(folderPath, baseName);
+      let counter = 1;
+      // טיפול בשמות כפולים
+      while (fs.existsSync(filePath)) {
+        const ext = path.extname(baseName);
+        const name = path.basename(baseName, ext);
+        filePath = path.join(folderPath, `${name}_${counter}${ext}`);
+        counter++;
+      }
+      await fsp.writeFile(filePath, Buffer.from(att.data, 'base64'));
+      savedFiles.push(filePath);
+      console.log('Saved file:', filePath);
+    }
+    return { success: true, savedFiles, folderPath };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.handle('capture-mail-screenshot', async (event, { mailHtml }) => {
+  try {
+    // 1. צור חלון נסתר ב‑offscreen mode
+    const win = new BrowserWindow({
+      show: false,
+      webPreferences: { offscreen: true }
+    });
+    // 2. טען את ה‑HTML של גוף המייל בתוך data URL
+    await win.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(mailHtml)}`);
+    // 3. חכה לטעינה מלאה, צלם את המסך ושמור PNG
+    await new Promise(resolve => win.webContents.once('did-finish-load', resolve));
+    const image = await win.webContents.capturePage();
+    const dateFolder = path.join(app.getPath('documents'), new Date().toISOString().slice(0,10));
+    if (!fs.existsSync(dateFolder)) fs.mkdirSync(dateFolder);
+    // 4. שיח שמירת קובץ
+    const { filePath, canceled } = await dialog.showSaveDialog({
+      defaultPath: path.join(dateFolder, 'invoice.png')
+    });
+    if (filePath && !canceled) {
+      fs.writeFileSync(filePath, image.toPNG());
+      win.destroy();
+      return { success: true, filePath };
+    } else {
+      win.destroy();
+      return { success: false, canceled: true };
+    }
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+
+// --- Gmail Preview & Screenshot via BrowserWindow ---
+const GMAIL_PARTITION = 'persist:gmail-session';
+const GMAIL_PREVIEW_PRELOAD = path.join(__dirname, 'gmail-preview-preload.js');
+
+// Map to store preview window info by id
+const previewWindowInfo = new Map();
+
+ipcMain.handle('open-gmail-preview', async (event, { rfc822msgid, messageId, subject, from }) => {
+  try {
+    const mainWindow = BrowserWindow.getFocusedWindow();
+    const previewWin = new BrowserWindow({
+      parent: mainWindow,
+      modal: true,
+      width: 1200,  // רוחב גדול יותר לצילום טוב
+      height: 900,  // גובה גדול יותר לצילום טוב
+      minWidth: 1000,
+      minHeight: 700,
+      webPreferences: {
+        partition: GMAIL_PARTITION,
+        nodeIntegration: false,
+        contextIsolation: true,
+        preload: GMAIL_PREVIEW_PRELOAD,
+        zoomFactor: 1.0  // וידא זום תקין
+      }
+    });
+    
+    // שמור גם subject וגם from (השולח) לפי window id
+    previewWindowInfo.set(previewWin.id, { 
+      subject, 
+      from,
+      messageId,
+      rfc822msgid 
+    });
+    
+    previewWin.on('closed', () => {
+      previewWindowInfo.delete(previewWin.id);
+      event.sender.send('gmail-preview-closed');
+    });
+    
+    // תיקון URL של Gmail - השתמש תמיד ב-rfc822msgid
+    let gmailUrl;
+    if (rfc822msgid) {
+      // הדרך הנכונה לחפש מייל ספציפי ב-Gmail
+      gmailUrl = `https://mail.google.com/mail/u/0/#search/rfc822msgid:${rfc822msgid}`;
+      console.log('Gmail URL with rfc822msgid:', gmailUrl);
+    } else if (messageId) {
+      // אם אין rfc822msgid, נסה חיפוש כללי
+      gmailUrl = `https://mail.google.com/mail/u/0/#search/${messageId}`;
+      console.log('Gmail URL with messageId search:', gmailUrl);
+    } else {
+      throw new Error('חסר messageId או rfc822msgid');
+    }
+    
+    await previewWin.loadURL(gmailUrl);
+    
+    // המתן יותר זמן ואז נסה לפתוח את המייל אוטומטית
+    setTimeout(() => {
+      previewWin.webContents.executeJavaScript(`
+        console.log('מנסה פתיחה אוטומטית מtain process...');
+        
+        // וודא שהדף נטען מלא
+        if (document.readyState !== 'complete') {
+          window.addEventListener('load', () => {
+            setTimeout(tryAutoOpen, 2000);
+          });
+        } else {
+          setTimeout(tryAutoOpen, 2000);
+        }
+        
+        function tryAutoOpen() {
+          console.log('מבצע פתיחה אוטומטית...');
+          
+          // חפש אלמנטים של מיילים
+          const selectors = [
+            'tr[role="row"]:not([aria-selected="true"])',
+            '[role="listitem"]:not([aria-selected="true"])',
+            'div[data-legacy-thread-id]',
+            '.zA:not(.yW)'
+          ];
+          
+          for (let selector of selectors) {
+            const elements = document.querySelectorAll(selector);
+            if (elements.length > 0) {
+              console.log('מצא אלמנטים עם selector:', selector, elements.length);
+              elements[0].click();
+              
+              // המתן ונסה להרחיב
+              setTimeout(() => {
+                expandEmailContent();
+              }, 3000);
+              break;
+            }
+          }
+        }
+        
+        function expandEmailContent() {
+          console.log('מנסה להרחיב תוכן המייל...');
+          
+          // כפתורי הרחבה
+          const expandSelectors = [
+            '[aria-label*="Show"]',
+            '[aria-label*="More"]', 
+            '[title*="Show"]',
+            '.aaq',
+            '.amn',
+            '.bog'
+          ];
+          
+          expandSelectors.forEach(selector => {
+            const buttons = document.querySelectorAll(selector);
+            buttons.forEach(btn => {
+              if (btn && btn.offsetParent !== null) {
+                btn.click();
+                console.log('לחץ על כפתור הרחבה:', selector);
+              }
+            });
+          });
+          
+          // גלול למעלה
+          setTimeout(() => {
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+          }, 1000);
+        }
+      `).catch(err => console.log('JavaScript execution failed:', err));
+    }, 4000); // המתן 4 שניות במקום 3
+    
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.handle('capture-gmail-mailbody', async (event, { messageId, rfc822msgid, defaultFilename }) => {
+  try {
+    // מצא חלון preview פתוח
+    const previewWin = BrowserWindow.getAllWindows().find(w => w.getTitle().includes('Gmail'));
+    if (!previewWin) return { success: false, error: 'חלון Gmail לא פתוח' };
+    // בקש את ה-rect של גוף המייל
+    previewWin.webContents.send('request-capture-mail-body');
+    const rect = await new Promise(resolve => {
+      ipcMain.once('mail-body-rect', (evt, data) => resolve(data));
+      setTimeout(() => resolve(null), 5000); // הגנה מקרה תקיעה
+    });
+    if (!rect) return { success: false, error: 'לא נמצא גוף מייל' };
+    const image = await previewWin.webContents.capturePage(rect);
+    // שמור PNG
+    const dateFolder = path.join(app.getPath('documents'), new Date().toISOString().slice(0,10));
+    if (!fs.existsSync(dateFolder)) fs.mkdirSync(dateFolder);
+    const { filePath, canceled } = await dialog.showSaveDialog({
+      defaultPath: path.join(dateFolder, (defaultFilename || messageId || rfc822msgid) + '-mailbody.png')
+    });
+    if (filePath && !canceled) {
+      fs.writeFileSync(filePath, image.toPNG());
+      return { success: true, filePath };
+    } else {
+      return { success: false, canceled: true };
+    }
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.handle('capture-gmail-screenshot', async (event, { rfc822msgid, defaultFilename }) => {
+  try {
+    const gmailUrl = `https://mail.google.com/mail/u/0/#search/rfc822msgid:${rfc822msgid}`;
+    const captureWin = new BrowserWindow({
+      show: false,
+      webPreferences: {
+        offscreen: true,
+        partition: GMAIL_PARTITION,
+        nodeIntegration: false,
+        contextIsolation: true
+      }
+    });
+    await captureWin.loadURL(gmailUrl);
+    await new Promise(resolve => captureWin.webContents.once('did-finish-load', resolve));
+    // המתן עוד קצת לטעינה מלאה (תמונות, CSS)
+    await new Promise(res => setTimeout(res, 2000));
+    const image = await captureWin.webContents.capturePage();
+    captureWin.destroy();
+    // דיאלוג שמירה
+    const dateFolder = path.join(app.getPath('documents'), new Date().toISOString().slice(0,10));
+    if (!fs.existsSync(dateFolder)) fs.mkdirSync(dateFolder);
+    const { filePath, canceled } = await dialog.showSaveDialog({
+      defaultPath: path.join(dateFolder, (defaultFilename || rfc822msgid) + '.png')
+    });
+    if (filePath && !canceled) {
+      fs.writeFileSync(filePath, image.toPNG());
+      return { success: true, filePath };
+    } else {
+      return { success: false, canceled: true };
+    }
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+
+// Listener for capture from preview window
+ipcMain.on('capture-mail-body-from-preview', async (event) => {
+  try {
+    const previewWin = BrowserWindow.fromWebContents(event.sender);
+    if (!previewWin) return;
+    
+    // בקש את ה-rect של גוף המייל
+    previewWin.webContents.send('request-capture-mail-body');
+    const rect = await new Promise(resolve => {
+      ipcMain.once('mail-body-rect', (evt, data) => resolve(data));
+      setTimeout(() => resolve(null), 5000);
+    });
+    
+    if (!rect) {
+      previewWin.webContents.send('mailbody-capture-result', { error: 'לא נמצא גוף מייל' });
+      return;
+    }
+    
+    const image = await previewWin.webContents.capturePage(rect);
+    
+    // קבע שם קובץ מושכל יותר: from (השולח) הוא העדיפות הראשונהimage.png
+    const info = previewWindowInfo.get(previewWin.id) || {};
+    let baseName = '';
+    
+    // עדיפות לשם השולח
+    if (info.from && typeof info.from === 'string' && info.from.trim()) {
+      // נקה את השם מכתובת מייל ותווים מיותרים
+      let fromName = info.from;
+      // אם יש <...> בכתובת, קח רק את החלק לפני
+      if (fromName.includes('<')) {
+        fromName = fromName.split('<')[0].trim();
+      }
+      // אם יש @, קח רק את החלק לפני
+      if (fromName.includes('@')) {
+        fromName = fromName.split('@')[0].trim();
+      }
+      // נקה תווים לא חוקיים
+      baseName = fromName.replace(/[^\w\d\u0590-\u05FF\s\-\.]/g, '').replace(/\s+/g, '_').slice(0, 30);
+    } else if (info.subject && typeof info.subject === 'string' && info.subject.trim()) {
+      baseName = info.subject.replace(/[^\w\d\u0590-\u05FF\s\-\.]/g, '').replace(/\s+/g, '_').slice(0, 30);
+    } else {
+      baseName = 'gmail-capture';
+    }
+    
+    const dateStr = new Date().toISOString().slice(0,10);
+    const timeStr = new Date().toTimeString().slice(0,5).replace(':', '');
+    const filename = `${dateStr}_${timeStr}_${baseName}.png`;
+    
+    console.log('צילום מג׳ימייל: filename:', filename, 'windowId:', previewWin.id, 'info:', info);
+    
+    // שמור ברירת מחדל בתיקיית המסמכים עם תת-תיקייה לפי תאריך
+    const dateFolder = path.join(app.getPath('documents'), 'InvoiceBot', dateStr);
+    await fsp.mkdir(dateFolder, { recursive: true });
+    
+    const { filePath, canceled } = await dialog.showSaveDialog({
+      defaultPath: path.join(dateFolder, filename)
+    });
+    
+    if (filePath && !canceled) {
+      fs.writeFileSync(filePath, image.toPNG());
+      previewWin.webContents.send('mailbody-capture-result', { filePath });
+    } else {
+      previewWin.webContents.send('mailbody-capture-result', { error: 'שמירה בוטלה' });
+    }
+  } catch (error) {
+    const previewWin = BrowserWindow.fromWebContents(event.sender);
+    if (previewWin) previewWin.webContents.send('mailbody-capture-result', { error: error.message });
+  }
+});
+
+// פתח תיקייה ב-explorer
+ipcMain.on('open-external-folder', (event, filePath) => {
+  if (filePath) {
+    const folder = path.dirname(filePath);
+    shell.openPath(folder);
+  }
+});
 
 app.whenReady().then(() => {
   loadGoogleAuth();

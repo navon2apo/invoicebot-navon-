@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect } from 'react'
 import './index.css'
 import EmailGenerator from './email-generator.js'
 
@@ -15,15 +15,6 @@ function App() {
   const [startDate, setStartDate] = useState('')
   const [endDate, setEndDate] = useState('')
   const [useDateFilter, setUseDateFilter] = useState(true)
-
-  const [savedFilesInfo, setSavedFilesInfo] = useState([]); // סטייט חדש לרשימת קבצים שנשמרו
-  const [savedFolderPath, setSavedFolderPath] = useState(''); // סטייט לנתיב התיקייה
-  const [showDownloadModal, setShowDownloadModal] = useState(false);
-  const [customFolderName, setCustomFolderName] = useState('');
-  const folderNameInputRef = useRef(null);
-  const [previewFile, setPreviewFile] = useState(null); // {type, url, filename}
-  const [showEmailBody, setShowEmailBody] = useState(null); // id של המייל שמוצג כרגע
-  const [emailBodyHtml, setEmailBodyHtml] = useState('');
 
   useEffect(() => {
     // Check if already authenticated
@@ -185,69 +176,57 @@ function App() {
     }
   }
 
-  // עיבוד והורדה עם אפשרות לשינוי שם תיקייה
-  const handleProcessAndDownload = async () => {
+  const handleProcessSelectedInvoices = async () => {
     if (selectedInvoices.length === 0) {
-      setStatus('❌ יש לבחור חשבוניות לעיבוד והורדה');
-      return;
+      setStatus('❌ יש לבחור חשבוניות לעיבוד')
+      return
     }
-    setIsLoading(true);
-    setStatus('🔄 מעבד ושומר קבצים...');
-    setSavedFilesInfo([]);
-    setSavedFolderPath('');
-    const allSavedFiles = [];
-    let folderPath = '';
-    let folderName = customFolderName.trim();
+
+    setIsLoading(true)
+    const processedResults = []
+    
     try {
       for (let i = 0; i < selectedInvoices.length; i++) {
-        const emailId = selectedInvoices[i];
-        const currentInvoice = invoices.find(inv => inv.id === emailId);
-        setStatus(`🔄 מעבד חשבונית ${i + 1}/${selectedInvoices.length}: ${currentInvoice?.subject || emailId}`);
+        const emailId = selectedInvoices[i]
+        const currentInvoice = invoices.find(inv => inv.id === emailId)
+        
+        setStatus(`🔄 מעבד חשבונית ${i + 1}/${selectedInvoices.length}: ${currentInvoice?.subject || emailId}`)
+        
         try {
-          const result = await window.electronAPI.processInvoiceAttachments(emailId);
-          // עדכון סטטוס עיבוד
-          setInvoices(prev => prev.map(invoice =>
-            invoice.id === emailId
+          const result = await window.electronAPI.processInvoiceAttachments(emailId)
+          processedResults.push(result)
+          
+          // Update the invoice with processed data
+          setInvoices(prev => prev.map(invoice => 
+            invoice.id === emailId 
               ? { ...invoice, processedData: result, isProcessed: true }
               : invoice
-          ));
-          // שמירת קבצים (אם יש)
-          if (currentInvoice.attachments && currentInvoice.attachments.length > 0) {
-            // שלח את שם התיקייה המותאם (אם הוזן)
-            const saveResult = await window.electronAPI.saveAttachmentsToFolder(currentInvoice.attachments, currentInvoice.date || new Date().toISOString(), folderName);
-            if (saveResult.success) {
-              allSavedFiles.push(...saveResult.savedFiles.map(f => ({
-                file: f,
-                emailSubject: currentInvoice.subject
-              })));
-              if (!folderPath && saveResult.savedFiles.length > 0) {
-                // שמור את נתיב התיקייה הראשונה
-                folderPath = fspFolderOnly(saveResult.savedFiles[0]);
-              }
-            }
-          }
+          ))
+          
         } catch (error) {
-          // המשך גם אם יש שגיאה באחת החשבוניות
-          allSavedFiles.push({ file: 'שגיאה: ' + error.message, emailSubject: currentInvoice.subject });
+          console.error(`Error processing invoice ${emailId}:`, error)
+          processedResults.push({
+            emailId,
+            success: false,
+            error: error.message
+          })
         }
       }
-      setSavedFilesInfo(allSavedFiles);
-      setSavedFolderPath(folderPath);
-      setShowDownloadModal(true);
-      setStatus(`✅ נשמרו ${allSavedFiles.length} קבצים. ניתן לפתוח את התיקייה.`);
+      
+      const successCount = processedResults.filter(r => r.success).length
+      const errorCount = processedResults.length - successCount
+      
+      if (errorCount === 0) {
+        setStatus(`✅ עיבוד הושלם בהצלחה עבור ${successCount} חשבוניות`)
+      } else {
+        setStatus(`⚠️ עיבוד הושלם: ${successCount} הצליחו, ${errorCount} נכשלו`)
+      }
+      
     } catch (error) {
-      setStatus('❌ שגיאה בעיבוד/הורדה: ' + error.message);
+      setStatus('❌ שגיאה בעיבוד החשבוניות: ' + error.message)
     } finally {
-      setIsLoading(false);
+      setIsLoading(false)
     }
-  };
-
-  // עוזר להוציא רק את נתיב התיקייה מהנתיב המלא
-  function fspFolderOnly(fullPath) {
-    if (!fullPath) return '';
-    const parts = fullPath.split(/\\|\//);
-    parts.pop();
-    return parts.join('/');
   }
 
   const toggleInvoiceSelection = (emailId) => {
@@ -358,26 +337,6 @@ function App() {
     }
   };
 
-  // הצגת preview לצרופות
-  const handlePreviewAttachment = (att) => {
-    if (att.mimeType && att.mimeType.startsWith('image/')) {
-      // תמונה
-      setPreviewFile({ type: 'image', url: `data:${att.mimeType};base64,${att.data}`, filename: att.filename });
-    } else if (att.mimeType === 'application/pdf') {
-      // PDF - פתח בחלון חדש
-      const blob = new Blob([Uint8Array.from(atob(att.data), c => c.charCodeAt(0))], { type: 'application/pdf' });
-      const url = URL.createObjectURL(blob);
-      setPreviewFile({ type: 'pdf', url, filename: att.filename });
-    } else {
-      setPreviewFile(null);
-    }
-  };
-  const handleClosePreview = () => {
-    setPreviewFile(null);
-  };
-
-
-
   return (
     <div className="container" dir="rtl">
       <div style={{textAlign: 'center', marginBottom: '30px'}}>
@@ -387,9 +346,6 @@ function App() {
         <p style={{fontSize: '1.1rem', color: '#666'}}>
           מערכת אוטומטית לאיסוף וניהול חשבוניות מ-Gmail
         </p>
-        <div style={{marginTop: '10px', color: 'red', fontWeight: 'bold', fontSize: '18px'}}>
-          גרסה: 2024-07-20 בדיקת קוד חי
-        </div>
       </div>
 
       {/* Main Control Panel */}
@@ -550,11 +506,11 @@ function App() {
                   {selectedInvoices.length === filteredInvoices.length ? 'בטל בחירה' : 'בחר הכל'}
                 </button>
                 <button
-                  onClick={handleProcessAndDownload}
+                  onClick={handleProcessSelectedInvoices}
                   disabled={selectedInvoices.length === 0 || isLoading}
                   className="px-3 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg text-sm transition-colors disabled:opacity-50"
                 >
-                  🔄 עבד והורד ({selectedInvoices.length})
+                  🔄 עבד נבחרים ({selectedInvoices.length})
                 </button>
                 <button
                   onClick={handleGenerateEmailSummary}
@@ -589,7 +545,6 @@ function App() {
               {filteredInvoices.map((invoice) => (
                 <div
                   key={invoice.id}
-                  data-email-id={invoice.id}
                   className={`border rounded-lg p-4 cursor-pointer transition-all duration-200 ${
                     selectedInvoices.includes(invoice.id)
                       ? 'border-blue-500 bg-blue-50'
@@ -617,45 +572,10 @@ function App() {
                                              <p className="text-xs text-gray-500">
                          📅 {new Date(parseInt(invoice.internalDate)).toLocaleDateString('he-IL')}
                        </p>
-                       {/* הצגת כל ה-attachments לפי metadata בלבד */}
                        {invoice.attachments && invoice.attachments.length > 0 && (
-                         <div className="flex gap-1 mt-1">
-                           {invoice.attachments.map((att, i) => (
-                             <span key={i} style={{cursor:'pointer'}}
-                               onClick={async e => {
-                                 e.stopPropagation();
-                                 setStatus('מוריד קובץ...');
-                                 const res = await window.electronAPI.downloadAttachment(invoice.id, att.id);
-                                 if (res.success) {
-                                   if (att.mimeType && att.mimeType.startsWith('image/')) {
-                                     setPreviewFile({ type: 'image', url: `data:${att.mimeType};base64,${res.data}`, filename: att.filename });
-                                   } else if (att.mimeType === 'application/pdf') {
-                                     const blob = new Blob([Uint8Array.from(atob(res.data), c => c.charCodeAt(0))], { type: 'application/pdf' });
-                                     const url = URL.createObjectURL(blob);
-                                     setPreviewFile({ type: 'pdf', url, filename: att.filename });
-                                   } else {
-                                     // הורדה ישירה
-                                     const saveRes = await window.electronAPI.saveFileDialog(att.filename, res.data);
-                                     if (saveRes.success) setStatus('✅ נשמר בהצלחה: ' + saveRes.filePath);
-                                     else setStatus('❌ שמירה בוטלה או נכשלה');
-                                   }
-                                 } else {
-                                   setStatus('❌ שגיאה בהורדה: ' + res.error);
-                                 }
-                               }}
-                               title={`שם: ${att.filename}\nסוג: ${att.mimeType || ''}\nגודל: ${att.size ? att.size + ' bytes' : ''}`}
-                             >
-                               {att.mimeType && att.mimeType.startsWith('image/') ? (
-                                 <span style={{fontSize:'18px', color:'#1976d2'}}>🖼️</span>
-                               ) : att.mimeType === 'application/pdf' ? (
-                                 <span style={{fontSize:'18px', color:'#b71c1c'}}>📄</span>
-                               ) : (
-                                 <span>📎</span>
-                               )}
-                             </span>
-                           ))}
-                           <span className="text-xs text-blue-600">{invoice.attachments.length} קבצים מצורפים</span>
-                         </div>
+                         <p className="text-xs text-blue-600 mt-1">
+                           📎 {invoice.attachments.length} קבצים מצורפים
+                         </p>
                        )}
                        {invoice.isProcessed && (
                          <div className="mt-2 p-2 bg-green-50 border border-green-200 rounded text-xs">
@@ -686,21 +606,6 @@ function App() {
                        )}
                     </div>
                   </div>
-                  {/* כפתור פעולה יחיד */}
-                  <div className="mt-2">
-                    <button onClick={async e => {
-                      e.stopPropagation();
-                      setStatus('פותח Gmail לצילום...');
-                      const previewResult = await window.electronAPI.openGmailPreview(invoice.rfc822msgid, invoice.id, invoice.subject, invoice.from);
-                      if (previewResult.success) setStatus('✅ Gmail נפתח - השתמש בכפתור הצילום הכחול');
-                      else setStatus('❌ שגיאה בפתיחת Gmail: ' + previewResult.error);
-                    }} className="px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded text-sm font-medium transition-colors shadow-md">
-                      📧 פתח לצילום בGmail
-                    </button>
-                    <div className="text-xs text-gray-500 mt-1">
-                      💡 יפתח את המייל בGmail עם כפתור צילום מובנה
-                    </div>
-                  </div>
                 </div>
               ))}
             </div>
@@ -717,98 +622,6 @@ function App() {
             <p className="text-gray-500 mb-4">
               לחץ על "סרוק מיילים" כדי להתחיל לחפש חשבוניות ב-Gmail שלך
             </p>
-          </div>
-        )}
-        {savedFilesInfo.length > 0 && (
-          <div className="bg-blue-50 border border-blue-200 rounded p-3 mt-4 text-xs">
-            <div className="mb-2 font-bold text-blue-700">✅ קבצים שנשמרו:</div>
-            <ul>
-              {savedFilesInfo.map((f, idx) => (
-                <li key={idx}>{f.file} <span style={{color:'#888'}}>({f.emailSubject})</span></li>
-              ))}
-            </ul>
-            {savedFolderPath && (
-              <button
-                className="mt-2 px-2 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded text-xs"
-                onClick={() => window.electronAPI.openExternal('file://' + savedFolderPath)}
-              >
-                פתח תיקייה
-              </button>
-            )}
-          </div>
-        )}
-
-        {/* הצגת preview בפופאפ */}
-        {previewFile && (
-          <div style={{position:'fixed', top:0, left:0, width:'100vw', height:'100vh', background:'rgba(0,0,0,0.5)', zIndex:1000, display:'flex', alignItems:'center', justifyContent:'center'}} onClick={handleClosePreview}>
-            <div style={{background:'#fff', padding:20, borderRadius:8, maxWidth:'90vw', maxHeight:'90vh', position:'relative'}} onClick={e => e.stopPropagation()}>
-              <button onClick={handleClosePreview} style={{position:'absolute', top:10, right:10, fontSize:18, background:'none', border:'none', cursor:'pointer'}}>✖</button>
-              <div style={{marginBottom:10, fontWeight:'bold'}}>{previewFile.filename}</div>
-              {previewFile.type === 'image' ? (
-                <img src={previewFile.url} alt={previewFile.filename} style={{maxWidth:'80vw', maxHeight:'70vh', border:'1px solid #ccc', borderRadius:4}} />
-              ) : previewFile.type === 'pdf' ? (
-                <iframe src={previewFile.url} title={previewFile.filename} style={{width:'70vw', height:'70vh', border:'none'}} />
-              ) : null}
-            </div>
-          </div>
-        )}
-
-        {/* פידבק הורדה popup */}
-        {showDownloadModal && (
-          <div style={{position:'fixed', top:0, left:0, width:'100vw', height:'100vh', background:'rgba(0,0,0,0.4)', zIndex:2000, display:'flex', alignItems:'center', justifyContent:'center'}}>
-            <div style={{background:'#fff', padding:30, borderRadius:10, minWidth:350, maxWidth:500, boxShadow:'0 4px 16px rgba(0,0,0,0.15)', position:'relative'}}>
-              <button onClick={()=>setShowDownloadModal(false)} style={{position:'absolute', top:10, right:10, fontSize:18, background:'none', border:'none', cursor:'pointer'}}>✖</button>
-              <div style={{fontWeight:'bold', fontSize:18, marginBottom:10, color:'#1976d2'}}>✔️ קבצים נשמרו בהצלחה</div>
-              <div style={{marginBottom:10}}>
-                <label>שם תיקייה (ניתן לשנות לפני שמירה הבאה): </label>
-                <input ref={folderNameInputRef} value={customFolderName} onChange={e=>setCustomFolderName(e.target.value)} style={{width:'80%', padding:4, border:'1px solid #ccc', borderRadius:4}} />
-              </div>
-              <ul style={{maxHeight:150, overflowY:'auto', fontSize:13}}>
-                {savedFilesInfo.map((f, idx) => (
-                  <li key={idx}>{f.file} <span style={{color:'#888'}}>({f.emailSubject})</span></li>
-                ))}
-              </ul>
-              {savedFolderPath && (
-                <button
-                  className="mt-2 px-2 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded text-xs"
-                  style={{marginTop:10}}
-                  onClick={() => window.electronAPI.openExternal('file://' + savedFolderPath)}
-                >
-                  פתח תיקייה
-                </button>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* הצג מודאל עם גוף המייל (rendered HTML) */}
-        {showEmailBody && (
-          <div style={{position:'fixed', top:0, left:0, width:'100vw', height:'100vh', background:'rgba(0,0,0,0.4)', zIndex:3000, display:'flex', alignItems:'center', justifyContent:'center'}} onClick={()=>setShowEmailBody(null)}>
-            <div id="email-body-modal" style={{background:'#fff', padding:30, borderRadius:10, minWidth:350, maxWidth:700, maxHeight:'80vh', overflowY:'auto', position:'relative'}} onClick={e=>e.stopPropagation()}>
-              <button onClick={()=>setShowEmailBody(null)} style={{position:'absolute', top:10, right:10, fontSize:18, background:'none', border:'none', cursor:'pointer'}}>✖</button>
-              <div style={{fontWeight:'bold', fontSize:18, marginBottom:10, color:'#1976d2'}}>גוף המייל</div>
-              {/* הצג את גוף המייל בתוך iframe */}
-              <iframe
-                id="email-body-iframe"
-                title="email-body"
-                src={"data:text/html;charset=utf-8," + encodeURIComponent(emailBodyHtml)}
-                style={{width:'100%', minHeight:'400px', border:'1px solid #ccc', borderRadius:'6px', background:'#fff'}}
-                sandbox="allow-same-origin allow-popups allow-forms allow-scripts"
-              />
-              <button onClick={async e => {
-                e.stopPropagation();
-                setStatus('יוצר צילום גוף מייל...');
-                // שלח את ה-HTML המקורי ל-Electron לצילום
-                const res = await window.electronAPI.captureMailScreenshot(emailBodyHtml);
-                if (res.success) {
-                  setStatus('✅ צילום גוף המייל נשמר בהצלחה! ' + res.filePath);
-                } else if (res.canceled) {
-                  setStatus('צילום בוטל');
-                } else {
-                  setStatus('❌ שגיאה בצילום גוף המייל: ' + res.error);
-                }
-              }} className="ml-2 px-2 py-1 bg-gray-200 rounded text-xs mt-4">צלם את גוף המייל</button>
-            </div>
           </div>
         )}
     </div>
