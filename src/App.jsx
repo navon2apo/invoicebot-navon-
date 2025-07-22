@@ -381,7 +381,7 @@ function App() {
 
 
   return (
-    <div className="min-h-screen bg-gray-50" dir="rtl">
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50" dir="rtl">
       {/* Toolbar Component */}
       <Toolbar
         isAuthenticated={isAuthenticated}
@@ -399,8 +399,8 @@ function App() {
       <div className="container mx-auto px-4 py-6 max-w-7xl">
 
         {/* Date Filtering Panel */}
-        <div className="bg-white rounded-xl shadow-lg p-6 mb-6">
-          <h2 className="text-xl font-bold text-gray-800 mb-4">📅 פילטר תאריכים</h2>
+        <div className="bg-white rounded-2xl shadow-2xl border border-gray-100 p-8 mb-8 hover:shadow-3xl transition-all duration-300 transform hover:-translate-y-1">
+          <h2 className="text-2xl font-black bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent mb-6">📅 פילטר תאריכים</h2>
           
           <div className="flex items-center gap-4 mb-4">
             <label className="flex items-center gap-2 cursor-pointer">
@@ -454,27 +454,27 @@ function App() {
 
         {/* Statistics Section */}
         {invoices.length > 0 && (
-          <div className="bg-white rounded-xl shadow-lg p-6 mb-6">
-            <h2 className="text-xl font-bold text-gray-800 mb-4">📊 סטטיסטיקות</h2>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <div className="bg-blue-50 p-4 rounded-lg text-center">
-                <div className="text-2xl font-bold text-blue-600">{invoices.length}</div>
-                <div className="text-sm text-gray-600">מיילים נמצאו</div>
+          <div className="bg-gradient-to-r from-white to-blue-50 rounded-2xl shadow-2xl border border-gray-100 p-8 mb-8 hover:shadow-3xl transition-all duration-300 transform hover:-translate-y-1">
+            <h2 className="text-2xl font-black bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent mb-6">📊 סטטיסטיקות</h2>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+              <div className="bg-gradient-to-br from-blue-500 to-blue-600 p-6 rounded-2xl text-center transform hover:scale-105 transition-all duration-300 shadow-lg hover:shadow-xl">
+                <div className="text-3xl font-black text-white">{invoices.length}</div>
+                <div className="text-sm text-blue-100 font-medium">מיילים נמצאו</div>
               </div>
-              <div className="bg-green-50 p-4 rounded-lg text-center">
-                <div className="text-2xl font-bold text-green-600">
+              <div className="bg-gradient-to-br from-green-500 to-green-600 p-6 rounded-2xl text-center transform hover:scale-105 transition-all duration-300 shadow-lg hover:shadow-xl">
+                <div className="text-3xl font-black text-white">
                   {invoices.filter(inv => inv.isProcessed).length}
                 </div>
-                <div className="text-sm text-gray-600">מעובדים</div>
+                <div className="text-sm text-green-100 font-medium">מעובדים</div>
               </div>
-              <div className="bg-orange-50 p-4 rounded-lg text-center">
-                <div className="text-2xl font-bold text-orange-600">
+              <div className="bg-gradient-to-br from-orange-500 to-orange-600 p-6 rounded-2xl text-center transform hover:scale-105 transition-all duration-300 shadow-lg hover:shadow-xl">
+                <div className="text-3xl font-black text-white">
                   {invoices.reduce((sum, inv) => sum + (inv.attachments?.length || 0), 0)}
                 </div>
-                <div className="text-sm text-gray-600">קבצים מצורפים</div>
+                <div className="text-sm text-orange-100 font-medium">קבצים מצורפים</div>
               </div>
-              <div className="bg-purple-50 p-4 rounded-lg text-center">
-                <div className="text-2xl font-bold text-purple-600">
+              <div className="bg-gradient-to-br from-purple-500 to-purple-600 p-6 rounded-2xl text-center transform hover:scale-105 transition-all duration-300 shadow-lg hover:shadow-xl">
+                <div className="text-3xl font-black text-white">
                   {(() => {
                     const processedInvoices = invoices.filter(inv => inv.isProcessed)
                     if (processedInvoices.length === 0) return '0'
@@ -485,7 +485,7 @@ function App() {
                     return totalAmount.toLocaleString()
                   })()}
                 </div>
-                <div className="text-sm text-gray-600">סה"כ ש"ח</div>
+                <div className="text-sm text-purple-100 font-medium">סה"כ ש"ח</div>
               </div>
             </div>
           </div>
@@ -493,36 +493,36 @@ function App() {
 
         {/* Invoice Management Section */}
         {invoices.length > 0 && (
-          <div className="bg-white rounded-xl shadow-lg p-6">
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-2xl font-bold text-gray-800">
+          <div className="bg-gradient-to-r from-white to-gray-50 rounded-2xl shadow-2xl border border-gray-100 p-8 hover:shadow-3xl transition-all duration-300 transform hover:-translate-y-1">
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-3xl font-black bg-gradient-to-r from-green-600 to-blue-600 bg-clip-text text-transparent">
                 📋 חשבוניות שנמצאו ({filteredInvoices.length})
               </h2>
-              <div className="flex gap-2 flex-wrap">
+              <div className="flex gap-3 flex-wrap">
                 <button
                   onClick={selectAllInvoices}
-                  className="px-3 py-2 bg-gray-500 hover:bg-gray-600 text-white rounded-lg text-sm transition-colors"
+                  className="px-5 py-3 bg-gradient-to-r from-gray-600 to-gray-700 hover:from-gray-700 hover:to-gray-800 text-white rounded-xl text-sm font-bold transition-all duration-300 transform hover:scale-105 shadow-lg hover:shadow-xl"
                 >
                   {selectedInvoices.length === filteredInvoices.length ? 'בטל בחירה' : 'בחר הכל'}
                 </button>
                 <button
                   onClick={handleProcessAndDownload}
                   disabled={selectedInvoices.length === 0 || isLoading}
-                  className="px-3 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg text-sm transition-colors disabled:opacity-50"
+                  className="px-5 py-3 bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white rounded-xl text-sm font-bold transition-all duration-300 transform hover:scale-105 shadow-lg hover:shadow-xl disabled:opacity-50 disabled:transform-none disabled:cursor-not-allowed"
                 >
                   🔄 עבד והורד ({selectedInvoices.length})
                 </button>
                 <button
                   onClick={handleGenerateEmailSummary}
                   disabled={invoices.filter(inv => inv.isProcessed).length === 0 || isLoading}
-                  className="px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm transition-colors disabled:opacity-50"
+                  className="px-5 py-3 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white rounded-xl text-sm font-bold transition-all duration-300 transform hover:scale-105 shadow-lg hover:shadow-xl disabled:opacity-50 disabled:transform-none disabled:cursor-not-allowed"
                 >
                   📧 יצר סיכום
                 </button>
                 <button
                   onClick={handleExportCSV}
                   disabled={invoices.filter(inv => inv.isProcessed).length === 0 || isLoading}
-                  className="px-3 py-2 bg-orange-600 hover:bg-orange-700 text-white rounded-lg text-sm transition-colors disabled:opacity-50"
+                  className="px-5 py-3 bg-gradient-to-r from-orange-600 to-orange-700 hover:from-orange-700 hover:to-orange-800 text-white rounded-xl text-sm font-bold transition-all duration-300 transform hover:scale-105 shadow-lg hover:shadow-xl disabled:opacity-50 disabled:transform-none disabled:cursor-not-allowed"
                 >
                   📊 יצא CSV
                 </button>
@@ -530,14 +530,21 @@ function App() {
             </div>
 
             {/* Search Bar */}
-            <div className="mb-4">
-              <input
-                type="text"
-                placeholder="חפש חשבוניות לפי נושא או שולח..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              />
+            <div className="mb-6">
+              <div className="relative">
+                <input
+                  type="text"
+                  placeholder="🔍 חפש חשבוניות לפי נושא או שולח..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full px-6 py-4 text-lg border-2 border-gray-200 rounded-2xl focus:ring-4 focus:ring-blue-300 focus:border-blue-500 transition-all duration-300 shadow-lg hover:shadow-xl bg-gradient-to-r from-white to-blue-50"
+                />
+                <div className="absolute right-4 top-1/2 transform -translate-y-1/2 text-gray-400">
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+                  </svg>
+                </div>
+              </div>
             </div>
 
             {/* Invoice List */}
@@ -643,17 +650,17 @@ function App() {
                     </div>
                   </div>
                   {/* כפתור פעולה יחיד */}
-                  <div className="mt-2">
+                  <div className="mt-4">
                     <button onClick={async e => {
                       e.stopPropagation();
                       setStatus('פותח Gmail לצילום...');
                       const previewResult = await window.electronAPI.openGmailPreview(invoice.rfc822msgid, invoice.id, invoice.subject, invoice.from);
                       if (previewResult.success) setStatus('✅ Gmail נפתח - השתמש בכפתור הצילום הכחול');
                       else setStatus('❌ שגיאה בפתיחת Gmail: ' + previewResult.error);
-                    }} className="px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded text-sm font-medium transition-colors shadow-md">
+                    }} className="px-6 py-3 bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white rounded-xl font-bold text-sm transition-all duration-300 transform hover:scale-105 shadow-lg hover:shadow-xl">
                       📧 פתח לצילום בGmail
                     </button>
-                    <div className="text-xs text-gray-500 mt-1">
+                    <div className="text-xs text-blue-600 mt-2 font-medium">
                       💡 יפתח את המייל בGmail עם כפתור צילום מובנה
                     </div>
                   </div>
